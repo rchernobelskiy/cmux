@@ -139,7 +139,7 @@ func (m *cMux) Match(matchers ...Matcher) net.Listener {
 func (m *cMux) MatchWithWriters(matchers ...MatchWriter) net.Listener {
 	ml := muxListener{
 		Listener: m.root,
-		connc:    make(chan *MuxConn, m.bufLen),
+		connc:    make(chan net.Conn, m.bufLen),
 		donec:    make(chan struct{}),
 	}
 	m.sls = append(m.sls, matchersListener{ss: matchers, l: ml})
@@ -254,7 +254,7 @@ func (m *cMux) handleErr(err error) bool {
 
 type muxListener struct {
 	net.Listener
-	connc chan *MuxConn
+	connc chan net.Conn
 	donec chan struct{}
 }
 
@@ -264,29 +264,16 @@ func (l muxListener) Accept() (net.Conn, error) {
 		if !ok {
 			return nil, ErrListenerClosed
 		}
-		return c.Conn, nil
+		return c, nil
 	case <-l.donec:
 		return nil, ErrServerClosed
-	}
-}
-
-func (l muxListener) AcceptWithAuthority() (string, net.Conn, error) {
-	select {
-	case c, ok := <-l.connc:
-		if !ok {
-			return "", nil, ErrListenerClosed
-		}
-		return c.authority, c.Conn, nil
-	case <-l.donec:
-		return "", nil, ErrServerClosed
 	}
 }
 
 // MuxConn wraps a net.Conn and provides transparent sniffing of connection data.
 type MuxConn struct {
 	net.Conn
-	buf       bufferedReader
-	authority string
+	buf bufferedReader
 }
 
 func newMuxConn(c net.Conn) *MuxConn {
